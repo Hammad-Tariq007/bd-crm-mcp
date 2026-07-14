@@ -1,0 +1,30 @@
+{
+  "name": "bd-crm-analytics-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Read-only MCP server exposing Meissasoft BD Leads CRM analytics (win rate, funnel, connects economics, velocity, forecast, leads) over the CRM public API.",
+  "type": "module",
+  "bin": {
+    "bd-crm-analytics-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
