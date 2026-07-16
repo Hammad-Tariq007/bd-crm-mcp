@@ -22,9 +22,12 @@ function resolveDark(pref: ThemePref): boolean {
 /** System/Light/Dark preference, persisted and applied to <html data-theme>. */
 export function useTheme() {
   const [pref, setPref] = useState<ThemePref>(readPref);
+  const [isDark, setIsDark] = useState<boolean>(() => resolveDark(readPref()));
 
   const apply = useCallback((p: ThemePref) => {
-    document.documentElement.setAttribute("data-theme", resolveDark(p) ? "dark" : "light");
+    const dark = resolveDark(p);
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    setIsDark(dark);
   }, []);
 
   // Re-apply when the preference changes.
@@ -48,5 +51,5 @@ export function useTheme() {
     setPref(p);
   }, []);
 
-  return { pref, setTheme };
+  return { pref, isDark, setTheme };
 }

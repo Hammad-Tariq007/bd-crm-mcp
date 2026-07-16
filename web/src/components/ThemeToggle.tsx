@@ -10,7 +10,7 @@ const OPTIONS: { value: ThemePref; label: string; icon: string }[] = [
 
 /** Fixed top-right System/Light/Dark picker, matching the CRM's appearance control. */
 export function ThemeToggle() {
-  const { pref, setTheme } = useTheme();
+  const { pref, isDark, setTheme } = useTheme();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -22,8 +22,6 @@ export function ThemeToggle() {
     document.addEventListener("click", onClick);
     return () => document.removeEventListener("click", onClick);
   }, [open]);
-
-  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
 
   return (
     <div ref={ref} className="fixed top-3 right-4 z-50">
