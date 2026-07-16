@@ -16,7 +16,7 @@ export function Sidebar({ chats, activeId, name, onNew, onOpen, onDelete, onColl
   const initial = (name.trim()[0] || "U").toUpperCase();
 
   return (
-    <aside className="flex min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar">
+    <aside className="flex h-full min-w-0 flex-col overflow-hidden border-r border-border bg-sidebar">
       <div className="px-3.5 pt-3.5 pb-2.5">
         <div className="flex items-center justify-between gap-2 px-1 pb-3">
           <div className="flex items-center gap-2.5 text-[14.5px] font-semibold whitespace-nowrap">
