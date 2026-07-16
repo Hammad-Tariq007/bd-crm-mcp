@@ -15,7 +15,7 @@ interface ChatViewProps {
 
 /** The signed-in chat experience: sidebar + conversation thread + composer. */
 export function ChatView({ name, onSignedOut }: ChatViewProps) {
-  const { chats, active, activeId, startNew, open, remove, append, appendTo } = useChats();
+  const { chats, active, activeId, startNew, open, remove, clear, append, appendTo } = useChats();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(SIDEBAR_KEY) === "collapsed";
@@ -66,11 +66,7 @@ export function ChatView({ name, onSignedOut }: ChatViewProps) {
 
   const handleLogout = async () => {
     await logout();
-    try {
-      localStorage.removeItem("bdmcp_chats_v1");
-    } catch {
-      /* ignore */
-    }
+    clear();
     onSignedOut();
   };
 
@@ -127,7 +123,7 @@ export function ChatView({ name, onSignedOut }: ChatViewProps) {
             {isEmpty ? (
               <Welcome name={name} onPick={send} />
             ) : (
-              messages.map((m, i) => <Message key={i} message={m} />)
+              messages.map((m) => <Message key={m.id} message={m} />)
             )}
             {pending && <PendingMessage />}
           </div>
