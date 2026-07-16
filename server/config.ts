@@ -8,8 +8,9 @@
 
 import type { Config as CrmConfig } from "../src/config.js";
 
-/** Default chat model — one place to change the model. Overridable via LLM_MODEL. */
+/** Cross-environment defaults (same for dev and prod). Overridable via env. */
 export const DEFAULT_LLM_MODEL = "anthropic/claude-sonnet-5";
+export const DEFAULT_LLM_BASE_URL = "https://openrouter.ai/api/v1";
 
 export type ServerConfig = {
   /** CRM public API base (no trailing slash), e.g. https://bd-crm.meissasoft.com */
@@ -50,8 +51,10 @@ export function loadServerConfig(): ServerConfig {
   // Optional at boot: the auth/security surfaces work without it. /mcp/chat returns a
   // clean "chat not configured" error until it is set.
   const llmApiKey = (process.env.LLM_API_KEY ?? "").trim();
-  const llmBaseUrl = (process.env.LLM_BASE_URL ?? "https://openrouter.ai/api/v1").trim().replace(/\/+$/, "");
-  const llmModel = (process.env.LLM_MODEL ?? DEFAULT_LLM_MODEL).trim();
+  // Empty (unset OR blank) falls back to the cross-env default, so compose can pass
+  // `${LLM_BASE_URL:-}` / `${LLM_MODEL:-}` without clobbering the default.
+  const llmBaseUrl = ((process.env.LLM_BASE_URL ?? "").trim().replace(/\/+$/, "")) || DEFAULT_LLM_BASE_URL;
+  const llmModel = (process.env.LLM_MODEL ?? "").trim() || DEFAULT_LLM_MODEL;
 
   if (missing.length > 0) {
     throw new Error(

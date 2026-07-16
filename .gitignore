@@ -1,5 +1,10 @@
 node_modules/
 dist/
+# Real env files (with secrets) — never commit. Templates (*.example) ARE tracked.
 .env
+.env.*
+!.env.example
+!.env.local.example
+!.env.prod.example
 *.log
 test-smoke.mjs
