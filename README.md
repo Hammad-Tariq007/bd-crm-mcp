@@ -216,12 +216,39 @@ every call returns a readable 401/403.
 
 ### Deploy (reference — not auto-applied)
 
+Nothing environment-specific is hardcoded — the service reads everything from env, so
+**dev and prod differ only by their `.env` file**:
+
+- `.env.local.example` — dev values (`CRM_BASE_URL=http://localhost:8001`, dev `PROJECT_ID`).
+- `.env.prod.example` — prod values (`CRM_BASE_URL=https://bd-crm.meissasoft.com`, prod `PROJECT_ID`).
+
+Both carry **placeholders only** for `CRM_ADMIN_TOKEN`, `LLM_API_KEY`, `SESSION_SECRET`.
+
+Build & push the image to GHCR (same flow as the CRM image), then deploy from it:
+
+```bash
+export MCP_IMAGE_TAG=$(git rev-parse --short HEAD)      # or a semver, e.g. v1.0.0
+echo "$GHCR_PAT" | docker login ghcr.io -u <github-username> --password-stdin
+docker build -t ghcr.io/meissasoft/bd-crm-mcp:$MCP_IMAGE_TAG \
+             -t ghcr.io/meissasoft/bd-crm-mcp:latest .
+docker push ghcr.io/meissasoft/bd-crm-mcp:$MCP_IMAGE_TAG
+docker push ghcr.io/meissasoft/bd-crm-mcp:latest
+```
+
+On the host:
+
+```bash
+cp .env.prod.example .env      # then fill the 3 secrets
+docker compose up -d bd-crm-mcp
+```
+
 - `Dockerfile` — builds `server/` and runs `server/dist/server/main.js` on `PORT`.
-- `deploy/docker-compose.snippet.yml` — the isolated service block to add to the prod stack.
+- `deploy/docker-compose.snippet.yml` — isolated service block; **`image:` from GHCR**, every
+  value via `${VAR}` (no baked IDs/URLs). Caddy network is a `TODO` to fill after inspecting the stack.
 - `deploy/Caddyfile.snippet` — routes `/mcp/*` to the container (`flush_interval -1` for SSE).
 
-Deploy is a **separate, deliberate step**: add the container + Caddy route, set the three
-secrets in the host env, and confirm the CRM app is untouched.
+Deploy is a **separate, deliberate step**: push the image, set the `.env`, add the container +
+Caddy route, and confirm the CRM app is untouched.
 
 ---
 

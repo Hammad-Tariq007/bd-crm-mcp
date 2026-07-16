@@ -2,38 +2,56 @@
 # ADD THIS SERVICE to the prod docker-compose stack. Do NOT replace the file —
 # paste this block under `services:` alongside the CRM app.
 #
-# It is isolated from the CRM app: it only needs to (a) be on the same Docker
-# network as Caddy so Caddy can reach it, and (b) reach the CRM public API over
-# the network at CRM_BASE_URL. It shares no volumes or database with the CRM.
+# NOTHING environment-specific is baked in here: every value comes from the
+# environment via ${VAR}. docker compose interpolates these from the `.env`
+# file sitting next to the compose file (and/or the shell). So dev and prod
+# differ ONLY by that .env file:
 #
-# Real secrets come from the host environment / an .env file next to the compose
-# file — never hardcode them here.
+#     cp .env.prod.example .env    # (prod host)   then fill the 3 secrets
+#     cp .env.local.example .env   # (dev host)    then fill the 3 secrets
+#     docker compose up -d bd-crm-mcp
+#
+# The image is pulled from GHCR (no build on the host). Build & push it first:
+#
+#     export MCP_IMAGE_TAG=$(git rev-parse --short HEAD)   # or a semver, e.g. v1.0.0
+#     echo "$GHCR_PAT" | docker login ghcr.io -u <github-username> --password-stdin
+#     docker build -t ghcr.io/meissasoft/bd-crm-mcp:$MCP_IMAGE_TAG \
+#                  -t ghcr.io/meissasoft/bd-crm-mcp:latest .
+#     docker push ghcr.io/meissasoft/bd-crm-mcp:$MCP_IMAGE_TAG
+#     docker push ghcr.io/meissasoft/bd-crm-mcp:latest
+#   ( GHCR_PAT = a PAT/token with write:packages; same flow as the CRM image. )
+#
+# It is isolated from the CRM app: no shared volumes or DB. It only needs to be
+# reachable by Caddy and to reach the CRM public API at ${CRM_BASE_URL}.
 # ============================================================================
 
 services:
   bd-crm-mcp:
-    build:
-      context: ./bd-crm-mcp        # path to this repo on the host; or use `image:` from a registry
+    image: ghcr.io/meissasoft/bd-crm-mcp:${MCP_IMAGE_TAG:-latest}
     container_name: bd-crm-mcp
     restart: unless-stopped
     environment:
-      CRM_BASE_URL: "https://bd-crm.meissasoft.com"
-      WORKSPACE_SLUG: "bd-leads"
-      PROJECT_ID: "99361d89-81b6-4eee-83a6-24e622182383"
-      NODE_ENV: "production"
-      PORT: "8787"
-      LLM_BASE_URL: "https://openrouter.ai/api/v1"
-      LLM_MODEL: "anthropic/claude-sonnet-5"
-      # --- secrets: define these in the compose .env / host env, not inline ---
-      CRM_ADMIN_TOKEN: "${CRM_ADMIN_TOKEN:?set CRM_ADMIN_TOKEN}"
-      LLM_API_KEY: "${LLM_API_KEY:?set LLM_API_KEY}"
-      SESSION_SECRET: "${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET}"
+      # --- environment-specific: supplied entirely by the active .env ---
+      CRM_BASE_URL: ${CRM_BASE_URL:?set CRM_BASE_URL in .env}
+      WORKSPACE_SLUG: ${WORKSPACE_SLUG:?set WORKSPACE_SLUG in .env}
+      PROJECT_ID: ${PROJECT_ID:?set PROJECT_ID in .env}
+      # --- cross-env values (blank falls back to the app defaults) ---
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-8787}
+      # --- secrets: never inline; must be present in the active .env ---
+      CRM_ADMIN_TOKEN: ${CRM_ADMIN_TOKEN:?set CRM_ADMIN_TOKEN in .env}
+      LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY in .env}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in .env}
     expose:
-      - "8787"                     # internal only; Caddy terminates TLS and proxies /mcp/*
-    networks:
-      - web                        # <-- change to the network Caddy is on
+      - "8787"   # internal only; Caddy terminates TLS and reverse-proxies /mcp/*
 
-# If Caddy is on a named external network, make sure this service joins it:
+    # TODO(deploy): put this service on the SAME docker network as Caddy so Caddy
+    # can reach it as http://bd-crm-mcp:8787. Fill in after inspecting the stack.
+    # networks:
+    #   - <caddy-network>
+
 # networks:
-#   web:
+#   <caddy-network>:
 #     external: true
