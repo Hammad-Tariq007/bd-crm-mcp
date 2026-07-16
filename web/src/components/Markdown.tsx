@@ -29,17 +29,18 @@ const components: Components = {
     </pre>
   ),
   table: ({ children }) => (
-    <div className="my-2 overflow-x-auto">
-      <table className="border-collapse text-[13px]">{children}</table>
+    <div className="my-3 overflow-x-auto rounded-lg border border-border">
+      <table className="w-full border-collapse text-[13px]">{children}</table>
     </div>
   ),
   th: ({ children }) => (
-    <th className="border border-border bg-surface2 px-[11px] py-[7px] text-left font-semibold whitespace-nowrap">
+    <th className="border-b border-border bg-surface2 px-3.5 py-2.5 text-left font-semibold whitespace-nowrap text-fg">
       {children}
     </th>
   ),
+  tr: ({ children }) => <tr className="border-t border-border first:border-t-0 hover:bg-hover">{children}</tr>,
   td: ({ children }) => (
-    <td className="border border-border px-[11px] py-[7px] text-left whitespace-nowrap">{children}</td>
+    <td className="px-3.5 py-2.5 text-left whitespace-nowrap text-fg2">{children}</td>
   ),
 };
 

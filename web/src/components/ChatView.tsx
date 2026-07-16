@@ -77,7 +77,7 @@ export function ChatView({ name, onSignedOut }: ChatViewProps) {
       )}
 
       <div
-        className={`z-30 shrink-0 overflow-hidden max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[264px] max-md:shadow-2xl max-md:transition-transform max-md:duration-200 md:transition-[width] md:duration-200 ${
+        className={`z-30 h-full shrink-0 overflow-hidden max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:w-[264px] max-md:shadow-2xl max-md:transition-transform max-md:duration-200 md:transition-[width] md:duration-200 ${
           drawerOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
         } ${collapsed ? "md:w-0" : "md:w-[264px]"}`}
       >
