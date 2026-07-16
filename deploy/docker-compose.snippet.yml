@@ -1,0 +1,39 @@
+# ============================================================================
+# ADD THIS SERVICE to the prod docker-compose stack. Do NOT replace the file —
+# paste this block under `services:` alongside the CRM app.
+#
+# It is isolated from the CRM app: it only needs to (a) be on the same Docker
+# network as Caddy so Caddy can reach it, and (b) reach the CRM public API over
+# the network at CRM_BASE_URL. It shares no volumes or database with the CRM.
+#
+# Real secrets come from the host environment / an .env file next to the compose
+# file — never hardcode them here.
+# ============================================================================
+
+services:
+  bd-crm-mcp:
+    build:
+      context: ./bd-crm-mcp        # path to this repo on the host; or use `image:` from a registry
+    container_name: bd-crm-mcp
+    restart: unless-stopped
+    environment:
+      CRM_BASE_URL: "https://bd-crm.meissasoft.com"
+      WORKSPACE_SLUG: "bd-leads"
+      PROJECT_ID: "99361d89-81b6-4eee-83a6-24e622182383"
+      NODE_ENV: "production"
+      PORT: "8787"
+      LLM_BASE_URL: "https://openrouter.ai/api/v1"
+      LLM_MODEL: "anthropic/claude-sonnet-5"
+      # --- secrets: define these in the compose .env / host env, not inline ---
+      CRM_ADMIN_TOKEN: "${CRM_ADMIN_TOKEN:?set CRM_ADMIN_TOKEN}"
+      LLM_API_KEY: "${LLM_API_KEY:?set LLM_API_KEY}"
+      SESSION_SECRET: "${MCP_SESSION_SECRET:?set MCP_SESSION_SECRET}"
+    expose:
+      - "8787"                     # internal only; Caddy terminates TLS and proxies /mcp/*
+    networks:
+      - web                        # <-- change to the network Caddy is on
+
+# If Caddy is on a named external network, make sure this service joins it:
+# networks:
+#   web:
+#     external: true

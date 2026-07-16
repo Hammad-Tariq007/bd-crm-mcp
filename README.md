@@ -128,6 +128,103 @@ quarter?"* or *"Show the conversion funnel and biggest leak."*
 
 ---
 
+## Hosted service — web chat + remote MCP (`server/`)
+
+Everything above is the **local stdio** server, unchanged. The same repo also ships a
+**hosted** service (`server/`) that reuses the same `CrmClient` and the same 7 tools, and
+adds three network surfaces behind one URL (`https://bd-crm.meissasoft.com/mcp`):
+
+| Surface | Route | Who it's for | Gate |
+|---|---|---|---|
+| Web chat UI | `GET /mcp` | People in a browser | Login → httpOnly session cookie |
+| Chat backend | `POST /mcp/chat` | (the UI) | Session cookie |
+| Remote MCP | `POST /mcp/rpc` (alias `/mcp/sse`) | Claude Desktop | `Authorization: Bearer <your CRM token>` (or `X-Api-Key`) |
+
+**Auth model.** Login is *separate* from data fetching. To sign in, a person presents
+**their own** CRM personal token; the service verifies it passes the analytics gate
+(workspace admin **and** owner-or-analytics-flag), captures their identity, then **discards
+the token**. All data is fetched with a single server-side `CRM_ADMIN_TOKEN` — the browser
+never sees it, and the `ANTHROPIC_API_KEY` is server-side only. The remote MCP endpoint uses
+the same check on the token sent in its header.
+
+### Environment (hosted only)
+
+| Var | Example | Notes |
+|---|---|---|
+| `CRM_BASE_URL` | `https://bd-crm.meissasoft.com` | CRM public API base. |
+| `CRM_ADMIN_TOKEN` | `plane_api_…` | **Owner-level** token; does all data fetching. Never sent to the browser. |
+| `LLM_API_KEY` | `sk-or-v1-…` | Chat backend key — any OpenAI-compatible provider (OpenRouter). Server-side only. Blank ⇒ chat disabled. |
+| `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | OpenAI-compatible base URL. Defaults to OpenRouter. |
+| `LLM_MODEL` | `anthropic/claude-sonnet-5` | Model slug. Defaults to Claude Sonnet on OpenRouter. |
+| `WORKSPACE_SLUG` | `bd-leads` | |
+| `PROJECT_ID` | `99361d89-…` | BD Leads project UUID. |
+| `SESSION_SECRET` | 32+ random bytes | Signs the session cookie. `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `PORT` | `8787` | Listen port. |
+| `NODE_ENV` | `production` | In prod, gives cookies the `Secure` flag. |
+
+The chat backend calls an **OpenAI-compatible** chat/completions API (OpenRouter by default),
+so the provider is just `LLM_BASE_URL` + `LLM_API_KEY`. The model is pinned in one place —
+`DEFAULT_LLM_MODEL` in `server/config.ts` (currently `anthropic/claude-sonnet-5`) — and any
+deploy can override it with `LLM_MODEL`. Only the LLM-call layer is provider-specific; the 7
+tools and the `CrmClient` (env admin token) wiring are unchanged.
+
+**Mint `CRM_ADMIN_TOKEN`:** sign in to the CRM as the workspace **owner** (or an admin with
+analytics access), go to **Profile → Settings → Personal access tokens**, create one, and set
+it as `CRM_ADMIN_TOKEN`. This is the only token stored, and it lives only in the server env.
+
+### Run locally
+
+```bash
+npm install
+npm run build:server
+CRM_BASE_URL=http://localhost:8001 \
+CRM_ADMIN_TOKEN=plane_api_… \
+WORKSPACE_SLUG=bd-leads \
+PROJECT_ID=99361d89-… \
+SESSION_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))") \
+LLM_API_KEY=sk-or-v1-…  \
+PORT=8790 npm run start:server
+# open http://localhost:8790/mcp   (dev live-reload: npm run dev:server)
+```
+
+### Connect Claude Desktop to the remote MCP endpoint
+
+Add this to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/…`,
+Windows: `%APPDATA%\Claude\…`). It uses [`mcp-remote`](https://www.npmjs.com/package/mcp-remote)
+to bridge stdio ↔ the remote HTTP endpoint, sending **your own** CRM token as a header:
+
+```json
+{
+  "mcpServers": {
+    "bd-crm-analytics": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote",
+        "https://bd-crm.meissasoft.com/mcp/rpc",
+        "--header", "X-Api-Key:plane_api_xxxxxxxxxxxxxxxxxxxx"
+      ]
+    }
+  }
+}
+```
+
+`X-Api-Key:<token>` (no space) sidesteps a known `mcp-remote` header-parsing quirk. If you
+prefer a bearer token, use `"--header", "Authorization:Bearer plane_api_…"` — but keep it
+one token with no space after the header name, or pass it via an env-substituted value. Fully
+quit and reopen Claude Desktop; the tools appear. Your token must pass the analytics gate or
+every call returns a readable 401/403.
+
+### Deploy (reference — not auto-applied)
+
+- `Dockerfile` — builds `server/` and runs `server/dist/server/main.js` on `PORT`.
+- `deploy/docker-compose.snippet.yml` — the isolated service block to add to the prod stack.
+- `deploy/Caddyfile.snippet` — routes `/mcp/*` to the container (`flush_interval -1` for SSE).
+
+Deploy is a **separate, deliberate step**: add the container + Caddy route, set the three
+secrets in the host env, and confirm the CRM app is untouched.
+
+---
+
 ## Behavior & troubleshooting
 
 - **Read-only.** No tool creates, edits, or deletes anything.

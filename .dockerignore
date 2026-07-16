@@ -1,0 +1,7 @@
+node_modules
+dist
+server/dist
+.env
+.git
+*.log
+test-smoke.mjs

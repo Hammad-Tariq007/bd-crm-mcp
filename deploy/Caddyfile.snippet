@@ -1,0 +1,22 @@
+# ============================================================================
+# Caddy routing for the hosted service. Add the `handle /mcp*` block INSIDE the
+# existing `bd-crm.meissasoft.com { ... }` site block, and place it BEFORE the
+# catch-all reverse_proxy to the CRM app so /mcp/* is captured first.
+#
+# `flush_interval -1` disables response buffering, which the remote MCP endpoint
+# needs for its SSE (text/event-stream) responses.
+# ============================================================================
+
+bd-crm.meissasoft.com {
+    # --- hosted BD analytics service: web chat UI + remote MCP endpoint ---
+    handle /mcp* {
+        reverse_proxy bd-crm-mcp:8787 {
+            flush_interval -1
+        }
+    }
+
+    # --- existing CRM app (unchanged) ---
+    handle {
+        reverse_proxy <existing-crm-upstream>
+    }
+}
