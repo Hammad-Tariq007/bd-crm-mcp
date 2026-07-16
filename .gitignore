@@ -3,3 +3,6 @@ dist/
 .env
 *.log
 test-smoke.mjs
+
+# TypeScript incremental build cache
+*.tsbuildinfo
