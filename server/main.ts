@@ -1,10 +1,11 @@
 /**
  * Hosted BD CRM Analytics service.
  *
- *   GET  /mcp            → login screen, or chat UI when signed in
+ *   GET  /mcp[/*]        → the built React SPA (static assets + index.html fallback)
+ *   GET  /mcp/session    → auth state for the SPA: { authed, name? } — NEVER any secret
  *   POST /mcp/login      → verify pasted CRM token via verifyAdmin(); set httpOnly session
  *   POST /mcp/logout     → clear session
- *   POST /mcp/chat       → cookie-gated; Claude + the 7 analytics tools (env admin token)
+ *   POST /mcp/chat       → cookie-gated; LLM + the 7 analytics tools (env admin token)
  *   ALL  /mcp/rpc        → header-gated remote MCP endpoint (Streamable HTTP) for Claude Desktop
  *   ALL  /mcp/sse        → alias of /mcp/rpc
  *
@@ -12,6 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 import express from "express";
 import cookieParser from "cookie-parser";
@@ -23,7 +25,11 @@ import { loadServerConfig, adminCrmConfig } from "./config.js";
 import { verifyAdmin, issueSession, readSession, SESSION_COOKIE } from "./auth.js";
 import { registerMcpTools } from "./tools.js";
 import { runChat, chatConfigured, type ChatTurn } from "./chat.js";
-import { loginPage, chatPage } from "./ui.js";
+
+// Built frontend (Vite output). Resolved from CWD so it works locally (repo root) and in
+// the container (WORKDIR /app). Overridable via WEB_DIST.
+const WEB_DIST = process.env.WEB_DIST || path.resolve(process.cwd(), "web/dist");
+const WEB_INDEX = path.join(WEB_DIST, "index.html");
 
 const cfg = loadServerConfig();
 const app = express();
@@ -39,14 +45,17 @@ const cookieOpts = {
   maxAge: 12 * 60 * 60 * 1000,
 };
 
-/* ---------------- web UI ---------------- */
+/* ---------------- JSON API ---------------- */
 
 app.get("/", (_req, res) => res.redirect("/mcp"));
 app.get("/healthz", (_req, res) => res.json({ ok: true, chat: chatConfigured(cfg) }));
 
-app.get("/mcp", (req, res) => {
+// Auth state for the SPA. Returns ONLY whether a valid session exists and the display name —
+// never a token, key, or any secret.
+app.get("/mcp/session", (req, res) => {
   const session = readSession(req.cookies?.[SESSION_COOKIE], cfg.sessionSecret);
-  res.type("html").send(session ? chatPage(session.name || session.email || "signed in") : loginPage());
+  if (!session) return res.json({ authed: false });
+  res.json({ authed: true, name: session.name || session.email || undefined });
 });
 
 app.post("/mcp/login", async (req, res) => {
@@ -144,6 +153,12 @@ async function handleMcp(req: express.Request, res: express.Response) {
 
 app.all("/mcp/rpc", handleMcp);
 app.all("/mcp/sse", handleMcp);
+
+/* ---------------- static frontend (registered AFTER the API/MCP routes) ---------------- */
+
+// Serve the built SPA assets, then fall back to index.html for any other GET under /mcp.
+app.use("/mcp", express.static(WEB_DIST));
+app.get(/^\/mcp(?:\/.*)?$/, (_req, res) => res.sendFile(WEB_INDEX));
 
 /* ---------------- start ---------------- */
 
