@@ -62,3 +62,47 @@ export function PendingMessage() {
     </div>
   );
 }
+
+/**
+ * The live assistant turn while it streams: shows running-tool chips, the answer text as it
+ * arrives (partial markdown + a blinking cursor), or the thinking dots before the first token.
+ */
+export function StreamingMessage({ text, tools }: { text: string; tools: string[] }) {
+  const thinking = text.length === 0;
+  return (
+    <div className="flex gap-3 py-2.5">
+      <Avatar />
+      <div className="min-w-0 flex-1">
+        <div className="rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm">
+          {tools.length > 0 && (
+            <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-fg3">
+              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+              <span>Using</span>
+              {tools.map((t) => (
+                <span key={t} className="rounded-full bg-surface2 px-2 py-0.5 font-mono text-fg2">
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+          {thinking ? (
+            <div className="flex items-center gap-1 py-1">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="h-1.5 w-1.5 animate-pulse rounded-full bg-fg3"
+                  style={{ animationDelay: `${i * 0.2}s` }}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="text-[14px] leading-relaxed">
+              <Markdown>{text}</Markdown>
+              <span className="ml-0.5 inline-block h-4 w-[2px] translate-y-[3px] animate-pulse bg-fg2 align-middle" />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

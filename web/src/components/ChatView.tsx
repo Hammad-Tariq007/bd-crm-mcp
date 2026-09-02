@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, logout, sendChat } from "../lib/api";
+import { ApiError, logout, streamChat } from "../lib/api";
 import { useChats } from "../hooks/useChats";
 import { Sidebar } from "./Sidebar";
 import { Composer } from "./Composer";
 import { Welcome } from "./Welcome";
-import { Message, PendingMessage } from "./Message";
+import { Message, StreamingMessage } from "./Message";
 
 const SIDEBAR_KEY = "bdmcp_sidebar";
 
@@ -25,6 +25,9 @@ export function ChatView({ name, onSignedOut }: ChatViewProps) {
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  // The live assistant turn while it streams (null when idle). Held in local state — only the
+  // finished message is committed to the persisted store, so tokens don't thrash localStorage.
+  const [stream, setStream] = useState<{ text: string; tools: string[] } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const messages = active?.messages ?? [];
@@ -33,7 +36,7 @@ export function ChatView({ name, onSignedOut }: ChatViewProps) {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, pending]);
+  }, [messages.length, pending, stream?.text]);
 
   const setCollapse = (v: boolean) => {
     setCollapsed(v);
@@ -49,17 +52,55 @@ export function ChatView({ name, onSignedOut }: ChatViewProps) {
     const history = active?.messages ?? [];
     const chatId = append({ role: "user", content: text });
     setPending(true);
+    setStream({ text: "", tools: [] });
+    // Closure-scoped accumulators are the source of truth; `setStream` just mirrors them for
+    // rendering, and the finished text is committed to the store once, on `done`.
+    let acc = "";
+    const tools: string[] = [];
+    let committed = false;
     try {
-      const res = await sendChat(text, history);
-      appendTo(chatId, { role: "assistant", content: res.reply, tools: res.toolsUsed });
+      await streamChat(text, history, {
+        onToken: (delta) => {
+          acc += delta;
+          setStream({ text: acc, tools: [...tools] });
+        },
+        onTool: (name) => {
+          if (!tools.includes(name)) tools.push(name);
+          setStream({ text: acc, tools: [...tools] });
+        },
+        onDone: (toolsUsed) => {
+          committed = true;
+          appendTo(chatId, {
+            role: "assistant",
+            content: acc || "(no answer produced)",
+            tools: toolsUsed,
+          });
+        },
+        onError: (message) => {
+          committed = true;
+          appendTo(chatId, { role: "assistant", content: `⚠ ${message}`, error: true });
+        },
+      });
+      // Stream ended without an explicit done/error (e.g. connection cut) — salvage any text.
+      if (!committed) {
+        appendTo(chatId, {
+          role: "assistant",
+          content: acc || "⚠ The connection ended before a reply completed.",
+          tools: [...tools],
+          error: acc.length === 0,
+        });
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
+        setStream(null);
+        setPending(false);
         onSignedOut();
         return;
       }
       const msg = err instanceof Error ? err.message : "Could not reach the server.";
       appendTo(chatId, { role: "assistant", content: `⚠ ${msg}`, error: true });
     } finally {
+      setStream(null);
       setPending(false);
     }
   };
@@ -125,7 +166,7 @@ export function ChatView({ name, onSignedOut }: ChatViewProps) {
             ) : (
               messages.map((m) => <Message key={m.id} message={m} />)
             )}
-            {pending && <PendingMessage />}
+            {stream !== null && <StreamingMessage text={stream.text} tools={stream.tools} />}
           </div>
         </div>
 

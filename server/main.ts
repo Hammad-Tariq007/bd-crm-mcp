@@ -24,7 +24,7 @@ import { CrmClient } from "../src/client.js";
 import { loadServerConfig, adminCrmConfig } from "./config.js";
 import { verifyAdmin, issueSession, readSession, SESSION_COOKIE } from "./auth.js";
 import { registerMcpTools } from "./tools.js";
-import { runChat, chatConfigured, type ChatTurn } from "./chat.js";
+import { runChatStream, chatConfigured, type ChatTurn } from "./chat.js";
 
 // Built frontend (Vite output). Resolved from CWD so it works locally (repo root) and in
 // the container (WORKDIR /app). Overridable via WEB_DIST.
@@ -93,12 +93,50 @@ app.post("/mcp/chat", async (req, res) => {
         .map((t: any) => ({ role: t.role, content: t.content }))
     : [];
 
+  // Stream the answer to the browser as Server-Sent Events (token/tool/done/error). Any
+  // pre-stream failure above (401/503/400) was already sent as JSON; from here on it's SSE.
+  res.status(200);
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // defeat proxy buffering
+  res.flushHeaders?.();
+
+  const send = (event: string, data: unknown) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    (res as any).flush?.();
+  };
+  // Heartbeat comment so idle proxies/load-balancers don't drop a long tool round.
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`: ping\n\n`);
+      (res as any).flush?.();
+    } catch {
+      /* connection gone; the finally-block will clean up */
+    }
+  }, 15000);
+  // Stop work if the client navigates away mid-stream.
+  let aborted = false;
+  res.on("close", () => {
+    aborted = true;
+  });
+
   try {
-    const result = await runChat(cfg, history, message);
-    res.json({ reply: result.reply, toolsUsed: [...new Set(result.toolsUsed)] });
+    const { toolsUsed } = await runChatStream(cfg, history, message, {
+      onToken: (delta) => {
+        if (!aborted) send("token", { delta });
+      },
+      onTool: (name) => {
+        if (!aborted) send("tool", { name });
+      },
+    });
+    if (!aborted) send("done", { toolsUsed: [...new Set(toolsUsed)] });
   } catch (err) {
     console.error(`[chat] error: ${(err as Error).message}`);
-    res.status(502).json({ error: `Chat failed: ${(err as Error).message}` });
+    if (!aborted) send("error", { message: `Chat failed: ${(err as Error).message}` });
+  } finally {
+    clearInterval(heartbeat);
+    res.end();
   }
 });
 
